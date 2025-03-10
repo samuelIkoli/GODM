@@ -23,17 +23,17 @@ func InitGeminiClient() *genai.Client {
 		os.Exit(1)
 	}
 
-	// fmt.Println("Listing available Gemini models...")
-	// modelIterator := client.ListModels(ctx)
+	fmt.Println("Listing available Gemini models...")
+	modelIterator := client.ListModels(ctx)
 
-	// // Iterate over available models
-	// for {
-	// 	model, err := modelIterator.Next()
-	// 	if err != nil {
-	// 		break // Exit loop when there are no more models
-	// 	}
-	// 	fmt.Printf("Available Model: %s\n", model.Name)
-	// }
+	// Iterate over available models
+	for {
+		model, err := modelIterator.Next()
+		if err != nil {
+			break // Exit loop when there are no more models
+		}
+		fmt.Printf("Available Model: %s\n", model.Name)
+	}
 
 	return client
 }

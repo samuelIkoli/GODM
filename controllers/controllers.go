@@ -18,6 +18,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+var uri string = "mongodb+srv://Samuel:Layefanimi07@samcluster0.ezatj.mongodb.net/?retryWrites=true&w=majority&appName=SamCluster0"
+
+
 type Controller struct {
 	logger *config.Log
 }
@@ -107,7 +110,6 @@ func (c *Controller) AIResponse(ctx *gin.Context) {
 
 func (h *Controller) GenerateEmbeddings(c *gin.Context) {
 
-	uri := "mongodb+srv://Samuel:Layefanimi07@samcluster0.ezatj.mongodb.net/?retryWrites=true&w=majority&appName=SamCluster0"
   	client, err := mongo.Connect( context.TODO(),options.Client().ApplyURI(uri))
   	
 	if err != nil {
@@ -120,11 +122,11 @@ func (h *Controller) GenerateEmbeddings(c *gin.Context) {
   	}()
 		
 	collection := client.Database("sample_mflix").Collection("movies")
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
 	defer cancel()
 
 	// Fetch first 50 movies
-	cursor, err := collection.Find(ctx, bson.M{}, options.Find().SetLimit(10))
+	cursor, err := collection.Find(ctx, bson.M{}, options.Find().SetLimit(50))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -220,4 +222,66 @@ func (h *Controller) UpdateUsers(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Users updated successfully"})
+}
+
+func (h *Controller) VectorSearch(c *gin.Context){
+
+	query := "District Attorney"
+	model := services.InitGeminiClient()
+	client, err := mongo.Connect( context.TODO(),options.Client().ApplyURI(uri))
+	if err != nil {
+		log.Printf("Error:%v\n", err)
+	}
+	collection := client.Database("sample_mflix").Collection("movies")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	defer cancel()
+
+	query_embedding, err := services.GetGeminiEmbedding(model, query)
+	// query_embedding = query_embedding[:768]
+	log.Printf("Query embedding length: %d:", len(query_embedding))
+	if err != nil {
+		log.Printf("Error generating embedding for %s: %v\n", query, err)
+	}
+
+	pipeline := mongo.Pipeline{
+        {{Key:"$vectorSearch", Value:bson.D{
+            {Key:"index", Value:"newindex"}, // Use the name of your vector index
+            {Key:"path", Value:"plot_embedding_hf"},
+            {Key:"queryVector", Value:query_embedding},
+            {Key:"numCandidates", Value:100}, // Number of items to consider before top-K selection
+            {Key:"limit", Value:2},
+        }}},
+    	bson.D{{Key: "$project", Value: bson.D{
+        	{Key: "title", Value: 1},
+        	{Key: "plot", Value: 1},  // Include only title and plot
+    }}},
+    }
+
+    opts := options.Aggregate().SetMaxTime(1000 * time.Second)
+    cursor, err := collection.Aggregate(ctx, pipeline, opts)
+	if cursor.RemainingBatchLength() == 0 {
+		log.Println("No results found for vector search.")
+		c.JSON(http.StatusOK, gin.H{"message": "No results found for vector search." })
+		return
+	}else{
+		log.Printf("Length is %d",cursor.RemainingBatchLength())
+	}
+    if err != nil {
+        log.Fatalf("Vector search failed: %v", err)
+    }
+    defer cursor.Close(ctx)
+
+	var response []bson.M
+    // Iterate over results
+    for cursor.Next(ctx) {
+        var result bson.M
+        if err := cursor.Decode(&result); err != nil {
+            fmt.Println("Error decoding result:", err)
+            continue
+        }
+		fmt.Printf("Movie Name: %s,\nMovie Plot: %s\n\n", result["title"], result["plot"])
+		response = append(response, result)
+    }
+
+	c.JSON(http.StatusOK, gin.H{"message": response })
 }
