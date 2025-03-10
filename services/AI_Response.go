@@ -37,3 +37,16 @@ func FormatResponse(data interface{}) ([]byte, error) {
 	}
 	return formattedJSON, nil
 }
+
+func GetGeminiEmbedding(client *genai.Client, text string) ([]float32, error) {
+
+    ctx := context.Background()
+    model := client.EmbeddingModel("text-embedding-004") // Use an embedding model
+
+    res, err := model.EmbedContent(ctx, genai.Text(text))
+    if err != nil {
+        return nil, err
+    }
+
+    return res.Embedding.Values, nil
+}

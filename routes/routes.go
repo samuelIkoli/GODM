@@ -18,7 +18,9 @@ func (r *Route) RegisterRoutes(router *gin.Engine) {
 	router.GET("/test", controller.Test)
 	router.GET("/ping", controller.Ping)
 	router.GET("/get", controller.GetMessage)
+	router.GET("/users", r.Controller.UpdateUsers)
 	router.GET("/gemini", r.Controller.AIResponse)
+	router.GET("/geminiembeddings", r.Controller.GenerateEmbeddings)
 }
 
 func NewRoute(controller *controller.Controller) *Route {
