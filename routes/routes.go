@@ -5,7 +5,11 @@ import (
 	controller "github.com/samuelIkoli/GODM/controllers"
 )
 
-func RegisterRoutes(router *gin.Engine) {
+type Route struct {
+	Controller *controller.Controller
+}
+
+func (r *Route) RegisterRoutes(router *gin.Engine) {
 	router.GET("/", func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{"message": "Deployed and Running"})
 	})
@@ -14,4 +18,11 @@ func RegisterRoutes(router *gin.Engine) {
 	router.GET("/test", controller.Test)
 	router.GET("/ping", controller.Ping)
 	router.GET("/get", controller.GetMessage)
+	router.GET("/gemini", r.Controller.AIResponse)
+}
+
+func NewRoute(controller *controller.Controller) *Route {
+	return &Route{
+		Controller: controller,
+	}
 }
