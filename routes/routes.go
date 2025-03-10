@@ -20,8 +20,9 @@ func (r *Route) RegisterRoutes(router *gin.Engine) {
 	router.GET("/get", controller.GetMessage)
 	router.GET("/users", r.Controller.UpdateUsers)
 	router.GET("/gemini", r.Controller.AIResponse)
-	router.GET("/geminiembeddings", r.Controller.GenerateEmbeddings)
+	router.GET("/gemini-embeddings", r.Controller.GenerateEmbeddings)
 	router.GET("/search", r.Controller.VectorSearch)
+	router.GET("/rag-search", r.Controller.RaggedResponse)
 }
 
 func NewRoute(controller *controller.Controller) *Route {

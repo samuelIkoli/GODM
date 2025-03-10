@@ -285,3 +285,94 @@ func (h *Controller) VectorSearch(c *gin.Context){
 
 	c.JSON(http.StatusOK, gin.H{"message": response })
 }
+
+func (h *Controller) RaggedResponse(c *gin.Context){
+
+	query := "She gets a lot of money after her uncle dies"
+	model := services.InitGeminiClient()
+	client, err := mongo.Connect( context.TODO(),options.Client().ApplyURI(uri))
+	if err != nil {
+		log.Printf("Error:%v\n", err)
+	}
+	collection := client.Database("sample_mflix").Collection("movies")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	defer cancel()
+
+	query_embedding, err := services.GetGeminiEmbedding(model, query)
+	log.Printf("Query embedding length: %d:", len(query_embedding))
+	if err != nil {
+		log.Printf("Error generating embedding for %s: %v\n", query, err)
+	}
+
+	pipeline := mongo.Pipeline{
+        {{Key:"$vectorSearch", Value:bson.D{
+            {Key:"index", Value:"newindex"}, // Use the name of your vector index
+            {Key:"path", Value:"plot_embedding_hf"},
+            {Key:"queryVector", Value:query_embedding},
+            {Key:"numCandidates", Value:100}, // Number of items to consider before top-K selection
+            {Key:"limit", Value:2},
+        }}},
+    	bson.D{{Key: "$project", Value: bson.D{
+        	{Key: "title", Value: 1},
+        	{Key: "plot", Value: 1},  // Include only title and plot
+    }}},
+    }
+
+    opts := options.Aggregate().SetMaxTime(1000 * time.Second)
+    cursor, err := collection.Aggregate(ctx, pipeline, opts)
+	if cursor.RemainingBatchLength() == 0 {
+		log.Println("No results found for vector search.")
+		c.JSON(http.StatusOK, gin.H{"message": "No results found for vector search." })
+		return
+	}else{
+		log.Printf("Length is %d",cursor.RemainingBatchLength())
+	}
+    if err != nil {
+        log.Fatalf("Vector search failed: %v", err)
+    }
+    defer cursor.Close(ctx)
+
+	var response []bson.M
+    // Iterate over results
+    for cursor.Next(ctx) {
+        var result bson.M
+        if err := cursor.Decode(&result); err != nil {
+            fmt.Println("Error decoding result:", err)
+            continue
+        }
+		fmt.Printf("Movie Name: %s,\nMovie Plot: %s\n\n", result["title"], result["plot"])
+		response = append(response, result)
+    }
+	
+	jsonData, err := json.Marshal(response)
+ 	if err != nil {
+  		panic(err)
+ 	}
+
+	answer1 := string(jsonData)
+
+	startPrompt := fmt.Sprintf("Based on the stringed json below, %s recommend these movies based on the original search query: %s, and make your response as humanoid as possible", answer1, query)
+	answer, err := services.GetAIResponse(model, startPrompt)
+	if err != nil {
+		fmt.Println("Failed to process file: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process file", "detail": err.Error()})
+		return
+	}
+
+	var parsedResponse map[string]interface{}
+	parseErr := json.Unmarshal([]byte(answer), &parsedResponse)
+	if parseErr != nil {
+		// If unmarshalling fails, wrap it in a response struct
+		parsedResponse = map[string]interface{}{"response": answer}
+	}
+
+	formattedAnswer, err := services.FormatResponse(parsedResponse)
+	if err != nil {
+		fmt.Println("Failed to format response: ", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to format response", "detail": err.Error()})
+		return
+	}
+	c.Data(http.StatusOK, "application/json", formattedAnswer)
+
+	// c.JSON(http.StatusOK, gin.H{"message": response })
+}
